@@ -1,0 +1,19 @@
+fastapi>=0.110.0
+uvicorn>=0.28.0
+jinja2>=3.1.3
+python-multipart>=0.0.9
+sqlalchemy>=2.0.28
+pydantic-settings>=2.2.1
+python-jose[cryptography]>=3.3.0
+bcrypt>=4.1.2
+requests>=2.31.0
+dash>=2.16.1
+dash-leaflet>=1.0.15
+a2wsgi>=1.10.4
+flask>=3.0.0
+# NOTE déploiement :
+# - `uvicorn[standard]` évité sur Vercel (dépendances natives uvloop/httptools
+#   => builds lents/fragiles). `uvicorn` pur suffit (local + serverless).
+# - Persistance Postgres optionnelle : si DATABASE_URL=postgresql://... est
+#   configuré en prod, ajouter alors `psycopg2-binary` (non inclus par défaut
+#   pour garder le build local/Windows léger et 100% offline-capable).

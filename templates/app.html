@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Odomi • Suivi Moto Intelligent</title>
+  
+  <!-- Tailwind CSS & Chart.js (local, voir setup_offline.py) -->
+  <link rel="stylesheet" href="/static/vendor/css/fonts.css">
+  <script src="/static/vendor/tailwind.js"></script>
+  <script src="/static/vendor/chart.min.js"></script>
+  
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#fff7ed',
+              100: '#ffedd5',
+              400: '#fb923c',
+              500: '#f97316',
+              600: '#ea580c',
+              700: '#c2410c'
+            }
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    body { 
+      font-family: 'Plus Jakarta Sans', sans-serif; 
+      -webkit-font-smoothing: antialiased;
+    }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+    /* Helper pour le rendu et dimensionnement optimal des icônes SVG */
+    .icon-box {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      vertical-align: middle;
+      flex-shrink: 0;
+    }
+    .icon-box svg {
+      width: 100%;
+      height: 100%;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    /* Défilement fluide et discret pour desktop et inertie iOS */
+    .custom-scrollbar {
+      -webkit-overflow-scrolling: touch;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.25);
+      border-radius: 9999px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: rgba(148, 163, 184, 0.45);
+    }
+  </style>
+</head>
+<body class="bg-slate-50 dark:bg-[#070b14] text-slate-800 dark:text-slate-100 min-h-screen flex flex-col transition-colors duration-200">
+  <div id="offline-assets-error" hidden style="background:#e11d48;color:#fff;font-size:12px;font-weight:700;text-align:center;padding:8px 12px;">
+    Ressources locales manquantes : ex&eacute;cutez &laquo; python setup_offline.py &raquo; avec Internet, puis rechargez.
+  </div>
+  <script>
+    (function () {
+      var missing = [];
+      if (typeof tailwind === "undefined") missing.push("tailwind.js");
+      if (typeof Chart === "undefined") missing.push("chart.min.js");
+      if (missing.length) {
+        var el = document.getElementById("offline-assets-error");
+        if (el) el.hidden = false;
+        console.error("Assets hors-ligne manquants (" + missing.join(", ") + "). Lancez 'python setup_offline.py' avec Internet.");
+      }
+    })();
+  </script>
+
+  {% if is_login %}
+  <!-- ===================================================================== -->
+  <!-- VUE AUTHENTIFICATION / CONNEXION                                      -->
+  <!-- ===================================================================== -->
+  <div class="flex-1 flex items-center justify-center p-4">
+    <div class="w-full max-w-sm bg-white dark:bg-[#0d1424] border border-slate-200 dark:border-slate-800 rounded-3xl p-8 shadow-2xl">
+      <div class="flex items-center gap-2 mb-6">
+        <div class="w-9 h-9 rounded-2xl bg-brand-500 flex items-center justify-center text-white font-black text-xl shadow-lg shadow-brand-500/30">O</div>
+        <span class="text-xl font-black tracking-tight text-slate-900 dark:text-white">Odomi<span class="text-brand-500">.</span></span>
+      </div>
+      <h2 class="text-lg font-bold mb-1">Connexion Pilote</h2>
+      <p class="text-xs text-slate-400 mb-5">Accédez au carnet de bord de votre deux-roues</p>
+      
+      {% if error %}
+      <div class="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-500 text-xs font-semibold">
+        {{ error }}
+      </div>
+      {% endif %}
+
+      <form method="POST" action="/login" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">Email</label>
+          <input type="email" name="username" placeholder="pilote@odomi.app" required class="w-full bg-slate-100 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-brand-500">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">Mot de passe</label>
+          <input type="password" name="password" placeholder="••••••••" required class="w-full bg-slate-100 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-brand-500">
+        </div>
+        <button type="submit" class="w-full py-2.5 bg-brand-500 hover:bg-brand-600 text-white font-bold rounded-xl text-sm shadow-lg shadow-brand-500/25 transition">
+          Se connecter
+        </button>
+      </form>
+    </div>
+  </div>
+
+  {% else %}
+  <!-- ===================================================================== -->
+  <!-- NOTIFICATION TOAST                                                    -->
+  <!-- ===================================================================== -->
+  {% if toast %}
+  <div id="toast" class="fixed top-5 right-5 z-50 flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-emerald-600 text-white shadow-xl text-xs font-bold animate-bounce">
+    <span class="icon-box w-4 h-4">{% include "icons/check-circle.svg" %}</span>
+    <span>{{ toast.text }}</span>
+  </div>
+  <script>setTimeout(() => { document.getElementById('toast')?.remove(); }, 3500);</script>
+  {% endif %}
+
+  <!-- ===================================================================== -->
+  <!-- HEADER / NAVBAR GLOBALE                                               -->
+  <!-- ===================================================================== -->
+  <header class="border-b border-slate-200 dark:border-slate-800/80 bg-white/80 dark:bg-[#0c1220]/80 backdrop-blur sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
+      <div class="flex items-center gap-4">
+        <a href="/" class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-xl bg-brand-500 flex items-center justify-center text-white font-black text-lg shadow-md shadow-brand-500/20">O</div>
+          <span class="text-lg font-black tracking-tight text-slate-900 dark:text-white">Odomi<span class="text-brand-500">.</span></span>
+        </a>
+
+        <!-- Sélecteur de moto active -->
+        <form method="POST" action="" id="motoSwitchForm" class="relative flex items-center">
+          <span class="absolute left-2.5 pointer-events-none text-brand-500 icon-box w-4 h-4">
+            {% include "icons/motorcycle.svg" %}
+          </span>
+          <select onchange="this.form.action='/motos/switch/' + this.value; this.form.submit();" class="text-xs font-semibold bg-slate-100 dark:bg-slate-800/90 border border-slate-300 dark:border-slate-700 rounded-xl pl-8 pr-7 py-1.5 appearance-none cursor-pointer focus:outline-none text-slate-800 dark:text-slate-200">
+            {% for m in motos %}
+            <option value="{{ m.id }}" {% if m.id == moto.id %}selected{% endif %}>{{ m.name }}</option>
+            {% endfor %}
+          </select>
+          <span class="absolute right-2.5 pointer-events-none text-[9px] text-slate-400">▼</span>
+        </form>
+      </div>
+
+      <!-- Navigation onglets -->
+      <nav class="hidden md:flex items-center gap-1 bg-slate-100 dark:bg-slate-900/90 p-1 rounded-2xl border border-slate-200 dark:border-slate-800">
+        <a href="/?tab=dashboard&period={{ period }}" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 {% if active_tab == 'dashboard' %}bg-brand-500 text-white shadow-sm{% else %}text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white{% endif %}">
+          <span class="icon-box w-4 h-4">{% include "icons/dashboard.svg" %}</span>
+          <span>Dashboard</span>
+        </a>
+        <a href="/?tab=trajets&period={{ period }}" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 {% if active_tab == 'trajets' %}bg-brand-500 text-white shadow-sm{% else %}text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white{% endif %}">
+          <span class="icon-box w-4 h-4">{% include "icons/route.svg" %}</span>
+          <span>Trajets</span>
+        </a>
+        <a href="/?tab=carte&period={{ period }}" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 {% if active_tab == 'carte' %}bg-brand-500 text-white shadow-sm{% else %}text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white{% endif %}">
+          <span class="icon-box w-4 h-4">{% include "icons/map.svg" %}</span>
+          <span>Carte & Calcul</span>
+        </a>
+        <a href="/?tab=entretien&period={{ period }}" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 {% if active_tab == 'entretien' %}bg-brand-500 text-white shadow-sm{% else %}text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white{% endif %}">
+          <span class="icon-box w-4 h-4">{% include "icons/maintenance.svg" %}</span>
+          <span>Entretien</span>
+        </a>
+      </nav>
+
+      <!-- Profil & Thème -->
+      <div class="flex items-center gap-2">
+        <button id="themeToggleBtn" type="button" class="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-xs text-slate-600 dark:text-slate-300 hover:text-brand-500 transition">
+          <span class="dark:hidden icon-box w-4 h-4">{% include "icons/moon.svg" %}</span>
+          <span class="hidden dark:inline-flex icon-box w-4 h-4">{% include "icons/sun.svg" %}</span>
+        </button>
+        <div class="flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-slate-800">
+          <div class="w-7 h-7 rounded-xl bg-brand-500/20 text-brand-500 flex items-center justify-center text-xs font-bold">
+            {{ user.name[:1] }}
+          </div>
+          <span class="text-xs font-bold hidden sm:inline">{{ user.name }}</span>
+          <a href="/logout" title="Déconnexion" class="text-slate-400 hover:text-rose-500 transition ml-1 icon-box w-4 h-4">
+            {% include "icons/logout.svg" %}
+          </a>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===================================================================== -->
+  <!-- CORPS PRINCIPAL DE L'APPLICATION                                      -->
+  <!-- ===================================================================== -->
+  <main class="max-w-7xl mx-auto px-3 sm:px-4 py-2.5 sm:py-3.5 flex-1 w-full space-y-2.5 sm:space-y-3 pb-8">
+
+    <!-- BARRE D'ACTIONS RAPIDES -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      <button onclick="openModal('modalTripManual')" class="flex items-center gap-2.5 p-2 sm:p-2.5 bg-white dark:bg-[#0d1424] hover:border-brand-500/50 border border-slate-200 dark:border-slate-800/80 rounded-2xl shadow-sm transition group text-left">
+        <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-brand-500/10 text-brand-500 flex items-center justify-center group-hover:scale-105 transition shrink-0">
+          <span class="icon-box w-3.5 h-3.5 sm:w-4 sm:h-4">{% include "icons/pen-tool.svg" %}</span>
+        </div>
+        <div class="min-w-0">
+          <div class="text-xs font-bold truncate">Saisie Manuelle</div>
+          <div class="text-[10px] text-slate-400 truncate">Kilomètres directs</div>
+        </div>
+      </button>
+
+      <a href="/?tab=carte" class="flex items-center gap-2.5 p-2 sm:p-2.5 bg-white dark:bg-[#0d1424] hover:border-brand-500/50 border border-slate-200 dark:border-slate-800/80 rounded-2xl shadow-sm transition group text-left">
+        <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center group-hover:scale-105 transition shrink-0">
+          <span class="icon-box w-3.5 h-3.5 sm:w-4 sm:h-4">{% include "icons/gps.svg" %}</span>
+        </div>
+        <div class="min-w-0">
+          <div class="text-xs font-bold truncate">Calcul Carte</div>
+          <div class="text-[10px] text-slate-400 truncate">Tracé Leaflet</div>
+        </div>
+      </a>
+
+      <button onclick="openModal('modalRefuel')" class="flex items-center gap-2.5 p-2 sm:p-2.5 bg-white dark:bg-[#0d1424] hover:border-brand-500/50 border border-slate-200 dark:border-slate-800/80 rounded-2xl shadow-sm transition group text-left">
+        <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center group-hover:scale-105 transition shrink-0">
+          <span class="icon-box w-3.5 h-3.5 sm:w-4 sm:h-4">{% include "icons/fuel-station.svg" %}</span>
+        </div>
+        <div class="min-w-0">
+          <div class="text-xs font-bold truncate">Nouveau Plein</div>
+          <div class="text-[10px] text-slate-400 truncate">Carburant & dépense</div>
+        </div>
+      </button>
+
+      <button onclick="openModal('modalMaintenance')" class="flex items-center gap-2.5 p-2 sm:p-2.5 bg-white dark:bg-[#0d1424] hover:border-brand-500/50 border border-slate-200 dark:border-slate-800/80 rounded-2xl shadow-sm transition group text-left">
+        <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center group-hover:scale-105 transition shrink-0">
+          <span class="icon-box w-3.5 h-3.5 sm:w-4 sm:h-4">{% include "icons/maintenance.svg" %}</span>
+        </div>
+        <div class="min-w-0">
+          <div class="text-xs font-bold truncate">Entretien / Vidange</div>
+          <div class="text-[10px] text-slate-400 truncate">Carnet révision</div>
+        </div>
+      </button>
+    </div>
+
+    <!-- BARRE DE FILTRES TEMPORELS GLOBAUX -->
+    <div class="bg-white dark:bg-[#0d1424] border border-slate-200 dark:border-slate-800/80 rounded-2xl p-1.5 sm:p-2 flex flex-wrap items-center justify-between gap-2 shadow-sm">
+      <div class="flex items-center gap-1 overflow-x-auto py-0.5 max-w-full">
+        {% set periods = [
+          ('today', 'Aujourd\'hui'),
+          ('week', 'Cette semaine'),
+          ('month', 'Ce mois'),
+          ('30days', '30 jours glissants'),
+          ('year', 'Cette année'),
+          ('all', 'Tout')
+        ] %}
+        {% for p_key, p_lbl in periods %}
+        <a href="/?tab={{ active_tab }}&subtab={{ active_subtab }}&period={{ p_key }}{% if search_query %}&q={{ search_query }}{% endif %}" 
+           class="px-2.5 py-1 rounded-xl text-xs font-bold whitespace-nowrap transition {% if period == p_key %}bg-brand-500 text-white shadow-sm{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60{% endif %}">
+          {{ p_lbl }}
+        </a>
+        {% endfor %}
+      </div>
+
+      <!-- Filtre calendrier personnalisé -->
+      <form method="GET" action="/" class="flex items-center gap-1.5 text-xs w-full sm:w-auto justify-end">
+        <input type="hidden" name="tab" value="{{ active_tab }}">
+        <input type="hidden" name="subtab" value="{{ active_subtab }}">
+        <input type="hidden" name="period" value="custom">
+        {% if search_query %}<input type="hidden" name="q" value="{{ search_query }}">{% endif %}
+        <input type="date" name="start_date" value="{{ start_date }}" class="bg-slate-100 dark:bg-slate-800/90 border border-slate-300 dark:border-slate-700 rounded-xl px-2 py-0.5 text-slate-800 dark:text-slate-200 focus:outline-none text-[11px] font-mono">
+        <span class="text-slate-400">→</span>
+        <input type="date" name="end_date" value="{{ end_date }}" class="bg-slate-100 dark:bg-slate-800/90 border border-slate-300 dark:border-slate-700 rounded-xl px-2 py-0.5 text-slate-800 dark:text-slate-200 focus:outline-none text-[11px] font-mono">
+        <button type="submit" class="px-2.5 py-0.5 bg-slate-200 dark:bg-slate-800 hover:bg-brand-500 hover:text-white rounded-xl font-bold transition text-[11px]">
+          Filtrer
+        </button>
+      </form>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- SECTION : DASHBOARD                                                   -->
+    <!-- ===================================================================== -->
+    {% if active_tab == 'dashboard' %}
+    
+    <!-- 4 CARTES KPIS -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      
+      <!-- 1. ROULAGE -->
+      <div class="bg-white dark:bg-[#0d1424] border border-slate-200 dark:border-slate-800/80 rounded-2xl p-4 shadow-sm flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between text-slate-400 text-[11px] font-bold uppercase tracking-wider mb-1">
+            <span class="flex items-center gap-1.5">
+              <span class="icon-box w-3.5 h-3.5">{% include "icons/history.svg" %}</span>
+              Roulage
+            </span>
+            <span class="text-[10px] text-slate-500 font-mono">{{ stats.nb_trips }} trajets</span>
+          </div>
+          <div class="flex items-baseline gap-2">
+            <span class="text-2xl font-black text-slate-900 dark:text-white font-mono">{{ stats.nb_jours }}</span>
+            <span class="text-xs text-slate-400 font-medium">jours actifs</span>
+          </div>
+        </div>
+        <div class="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+          <span>Du {{ stats.date_debut }}</span>
+          <span>au {{ stats.date_fin }}</span>
+        </div>
+      </div>
+
+      <!-- 2. DISTANCE TOTALE -->
+      <div class="bg-white dark:bg-[#0d1424] border border-slate-200 dark:border-slate-800/80 rounded-2xl p-4 shadow-sm flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between text-slate-400 text-[11px] font-bold uppercase tracking-wider mb-1">
+            <span class="flex items-center gap-1.5">
+              <span class="icon-box w-3.5 h-3.5">{% include "icons/odometer.svg" %}</span>
+              Distance Totale
+            </span>
+            {% if stats.delta_km_pct is not none %}
+            <span class="text-[10px] font-bold font-mono px-1.5 py-0.5 rounded-md {% if stats.delta_km_pct >= 0 %}bg-emerald-500/10 text-emerald-400 border border-emerald-500/20{% else %}bg-rose-500/10 text-rose-400 border border-rose-500/20{% endif %}">
+              {{ '+' if stats.delta_km_pct > 0 }}{{ stats.delta_km_pct }}%
+            </span>
+            {% endif %}
+          </div>
+          <div class="flex items-baseline gap-1.5">
+            <span class="text-2xl font-black text-brand-500 font-mono">{{ stats.total_km | number_fr }}</span>
+            <span class="text-xs text-slate-400 font-bold">km</span>
+          </div>
+        </div>
+        <div class="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+          Odomètre : {{ stats.current_odometer | number_fr }} km
+        </div>
+      </div>
+
+      <!-- 3. CARBURANT -->
+      <div class="bg-white dark:bg-[#0d1424] border border-slate-200 dark:border-slate-800/80 rounded-2xl p-4 shadow-sm flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between text-slate-400 text-[11px] font-bold uppercase tracking-wider mb-1">
+            <span class="flex items-center gap-1.5">
+              <span class="icon-box w-3.5 h-3.5 text-rose-500">{% include "icons/fuel.svg" %}</span>
+              Carburant
+            </span>
+            <span class="text-[10px] text-slate-500 font-mono">{{ stats.total_liters | number_fr }} L</span>
+          </div>
+          <div class="text-2xl font-black text-rose-500 font-mono">
+            {{ stats.total_fuel_cost | currency_fr }}
+          </div>
+        </div>
+        <div class="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+          <span>Moy. {{ stats.avg_l_per_100 }} L/100</span>
+          <span>{{ stats.consommation_moyenne }} Ar/km</span>
+        </div>
+      </div>
+
+      <!-- 4. HUILE MOTEUR -->
+      <div class="bg-white dark:bg-[#0d1424] border border-slate-200 dark:border-slate-800/80 rounded-2xl p-4 shadow-sm flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between text-slate-400 text-[11px] font-bold uppercase tracking-wider mb-1">
+            <span class="flex items-center gap-1.5">
+              <span class="icon-box w-3.5 h-3.5 text-amber-500">{% include "icons/oil.svg" %}</span>
+              Huile Moteur
+            </span>
+            <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full border {{ oil_status.badge_bg }}">{{ oil_status.status }}</span>
+          </div>
+          <div class="flex items-baseline gap-1.5">
+            <span class="text-2xl font-black font-mono text-slate-900 dark:text-white">{{ oil_status.remaining_vidange_km | number_fr }}</span>
+            <span class="text-xs text-slate-400 font-bold">km restants</span>
+          </div>
+        </div>
+        <div class="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60">
+          <div class="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+            <div class="h-full {{ oil_status.bar_color }}" style="width: {{ oil_status.percentage }}%;"></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- GRAPHIQUES -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      <div class="bg-white dark:bg-[#0d1424] border border-slate-200 dark:border-slate-800/80 rounded-2xl p-4 shadow-sm">
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+            <span class="text-brand-500 icon-box w-4 h-4">{% include "icons/statistics.svg" %}</span> Kilométrage
+          </span>
+          <span class="text-[10px] font-bold font-mono px-2 py-0.5 rounded-lg bg-brand-500/10 text-brand-500 border border-brand-500/20">
+            Vue {{ stats.charts.granularity }}
+          </span>
+        </div>
+        <div class="h-64">
+          <canvas id="chartKilometrage"></canvas>
+        </div>
+      </div>
+
+      <div class="bg-white dark:bg-[#0d1424] border border-slate-200 dark:border-slate-800/80 rounded-2xl p-4 shadow-sm">
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+            <span class="text-rose-500 icon-box w-4 h-4">{% include "icons/consumption.svg" %}</span> Dépenses Carburant
+          </span>
+          <span class="text-[10px] font-bold font-mono px-2 py-0.5 rounded-lg bg-rose-500/10 text-rose-500 border border-rose-500/20">
+            Vue {{ stats.charts.granularity }}
+          </span>
+        </div>
+        <div class="h-64">
+          <canvas id="chartCarburant"></canvas>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- ===================================================================== -->
+    <!-- SECTION : TRAJETS & PLEINS (RESPONSIVE & PAGINATION VISIBLE)          -->
+    <!-- ===================================================================== -->
+    {% if active_tab == 'trajets' %}
+    <div class="space-y-2.5">
+      <!-- Barre d'outils secondaire : Onglets, Recherche & Ajouts -->
+      <div class="flex flex-wrap items-center justify-between gap-2 bg-white dark:bg-[#0d1424] p-2 sm:p-2.5 rounded-2xl border border-slate-200 dark:border-slate-800/80 shadow-sm">
+        
+        <!-- Puces bascule Trajets / Pleins -->
+        <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl">
+          <a href="/?tab=trajets&subtab=trajets&period={{ period }}{% if search_query %}&q={{ search_query }}{% endif %}" class="px-3 py-1 rounded-lg text-xs font-bold transition {% if active_subtab == 'trajets' %}bg-brand-500 text-white shadow-sm{% else %}text-slate-500 hover:text-slate-900 dark:hover:text-white{% endif %}">
+            Trajets ({{ raw_trips_count }})
+          </a>
+          <a href="/?tab=trajets&subtab=pleins&period={{ period }}" class="px-3 py-1 rounded-lg text-xs font-bold transition {% if active_subtab == 'pleins' %}bg-brand-500 text-white shadow-sm{% else %}text-slate-500 hover:text-slate-900 dark:hover:text-white{% endif %}">
+            Pleins ({{ raw_refuels_count }})
+          </a>
+        </div>
+
+        <!-- Champ de recherche textuelle -->
+        <form method="GET" action="/" class="flex-1 min-w-[200px] max-w-xs">
+          <input type="hidden" name="tab" value="trajets">
+          <input type="hidden" name="subtab" value="{{ active_subtab }}">
+          <input type="hidden" name="period" value="{{ period }}">
+          <div class="relative flex items-center">
+            <span class="absolute left-2.5 pointer-events-none text-slate-400 icon-box w-3.5 h-3.5">
+              {% include "icons/search.svg" %}
+            </span>
+            <input type="text" name="q" value="{{ search_query }}" placeholder="Rechercher itinéraire..." class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl pl-8 pr-3 py-1 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-brand-500">
+          </div>
+        </form>
+
+        <!-- Boutons d'actions -->
+        <div class="flex items-center gap-1.5">
+          <a href="/?tab=carte" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow-sm">
+            <span class="icon-box w-3.5 h-3.5">{% include "icons/map.svg" %}</span>
+            <span>Tracer</span>
+          </a>
+          <button onclick="openModal('modalTripManual')" class="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl transition flex items-center gap-1 shadow-sm">
+            <span>+</span> Trajet
+          </button>
+          <button onclick="openModal('modalRefuel')" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl transition flex items-center gap-1 shadow-sm">
+            <span>+</span> Plein
+          </button>
+        </div>
+      </div>
+
+      <!-- TABLEAU DES TRAJETS AVEC HAUTEUR OPTIMISÉE & PIED TOUJOURS ACCESSIBLE -->
+      {% if active_subtab == 'trajets' %}
+      <div class="bg-white dark:bg-[#0d1424] border border-slate-200 dark:border-slate-800/80 rounded-2xl shadow-sm overflow-hidden flex flex-col">
+        <!-- Zone de défilement interne : calculée dynamiquement pour ne jamais dépasser de la vue -->
+        <div class="overflow-x-auto overflow-y-auto max-h-[55vh] md:max-h-[calc(100dvh-380px)] min-h-[260px] custom-scrollbar">
+          <table class="w-full text-xs text-left border-collapse min-w-[620px] sm:min-w-full">
+            <thead class="sticky top-0 z-10 bg-slate-50/95 dark:bg-[#0d1424]/95 backdrop-blur border-b border-slate-200 dark:border-slate-800/80">
+              <tr class="text-[10px] uppercase font-bold tracking-wider text-slate-400">
+                <th class="py-2.5 px-3 sm:px-4">Date</th>
+                <th class="py-2.5 px-3 sm:px-4">Itinéraire</th>
+                <th class="py-2.5 px-3 sm:px-4 text-right">Aller</th>
+                <th class="py-2.5 px-3 sm:px-4 text-right">Retour</th>
+                <th class="py-2.5 px-3 sm:px-4 text-right">Total KM</th>
+                <th class="py-2.5 px-3 sm:px-4 text-center">Plein associé</th>
+                <th class="py-2.5 px-3 sm:px-4 text-center">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+              {% for t in paginated_trips.items %}
+              <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition">
+                <td class="py-2.5 px-3 sm:px-4 font-mono text-slate-500 dark:text-slate-400 whitespace-nowrap">{{ t.date_str }}</td>
+                <td class="py-2.5 px-3 sm:px-4 font-bold text-slate-900 dark:text-white">
+                  <span>{{ t.depart }}</span>
+                  <span class="text-brand-500 mx-1.5">→</span>
+                  <span>{{ t.destination }}</span>
+                </td>
+                <td class="py-2.5 px-3 sm:px-4 text-right font-mono text-slate-500">{{ t.aller | number_fr }}</td>
+                <td class="py-2.5 px-3 sm:px-4 text-right font-mono text-slate-500">{{ t.retour | number_fr }}</td>
+                <td class="py-2.5 px-3 sm:px-4 text-right font-mono font-black text-brand-500 text-sm whitespace-nowrap">
+                  {{ t.total | number_fr }} <span class="text-[10px]">km</span>
+                </td>
+                <td class="py-2.5 px-3 sm:px-4 text-center">
+                  {% if t.has_refuel %}
+                  <span class="inline-flex items-center gap-1 font-mono text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                    <span class="icon-box w-3 h-3">{% include "icons/fuel.svg" %}</span>
+                    <span>{{ t.refuel_liters }} L</span>
+                  </span>
+                  {% else %}
+                  <span class="text-slate-400 dark:text-slate-600">—</span>
+                  {% endif %}
+                </td>
+                <td class="py-2.5 px-3 sm:px-4 text-center">
+                  <div class="flex items-center justify-center gap-1">
+                    <button 
+                      type="button"
+                      data-id="{{ t.id }}"
+                      data-date="{{ t.date }}"
+                      data-depart="{{ t.depart }}"
+                      data-dest="{{ t.destination }}"
+                      data-aller="{{ t.aller }}"
+                      data-retour="{{ t.retour }}"
+                      data-total="{{ t.total }}"
+                      onclick="openEditTripModal(this)"
+                      class="p-1 text-slate-400 hover:text-brand-500 rounded-lg transition" 
+                      title="Modifier">
+                      <span class="icon-box w-3.5 h-3.5">{% include "icons/edit.svg" %}</span>
+                    </button>
+                    <form method="POST" action="/trips/delete/{{ t.id }}" onsubmit="return confirm('Supprimer définitivement ce trajet ?');">
+                      <button type="submit" class="p-1 text-slate-400 hover:text-rose-500 rounded-lg transition" title="Supprimer">
+                        <span class="icon-box w-3.5 h-3.5">{% include "icons/trash.svg" %}</span>
+                      </button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="7" class="py-12 text-center text-slate-400">
+                  <div class="w-8 h-8 mx-auto mb-2 text-slate-400 icon-box">{% include "icons/route.svg" %}</div>
+                  <div class="font-bold">Aucun trajet trouvé pour cette sélection.</div>
+                  <div class="text-[11px]">Modifiez vos filtres ou ajoutez un nouveau roulage.</div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- FOOTER & PAGINATION TOUJOURS ACCESSIBLE ET FIXE -->
+        <div class="border-t border-slate-200 dark:border-slate-800/80 p-2.5 sm:p-3 bg-white/95 dark:bg-[#0c1220]/95 backdrop-blur flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs shrink-0 z-20 sticky bottom-0">
+          <div class="text-slate-500 font-mono text-[11px] text-center sm:text-left">
+            Affichage {{ paginated_trips.start_idx }} - {{ paginated_trips.end_idx }} sur {{ paginated_trips.total_items }} trajets
+          </div>
+
+          <div class="flex items-center gap-1.5 font-mono">
+            {% if paginated_trips.has_prev %}
+            <a href="/?tab=trajets&subtab=trajets&period={{ period }}&page={{ paginated_trips.prev_page }}{% if search_query %}&q={{ search_query }}{% endif %}{% if start_date %}&start_date={{ start_date }}{% endif %}{% if end_date %}&end_date={{ end_date }}{% endif %}" class="px-3 py-1.5 min-h-[32px] flex items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 font-bold active:scale-95 transition">
+              ‹ Précédent
+            </a>
+            {% endif %}
+
+            <span class="px-3 py-1 font-bold text-slate-600 dark:text-slate-300">
+              Page {{ paginated_trips.page }} / {{ paginated_trips.total_pages }}
+            </span>
+
+            {% if paginated_trips.has_next %}
+            <a href="/?tab=trajets&subtab=trajets&period={{ period }}&page={{ paginated_trips.next_page }}{% if search_query %}&q={{ search_query }}{% endif %}{% if start_date %}&start_date={{ start_date }}{% endif %}{% if end_date %}&end_date={{ end_date }}{% endif %}" class="px-3 py-1.5 min-h-[32px] flex items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 font-bold active:scale-95 transition">
+              Suivant ›
+            </a>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- TABLEAU DES PLEINS AVEC HAUTEUR OPTIMISÉE & PIED FIXÉ -->
+      {% if active_subtab == 'pleins' %}
+      <div class="bg-white dark:bg-[#0d1424] border border-slate-200 dark:border-slate-800/80 rounded-2xl shadow-sm overflow-hidden flex flex-col">
+        <!-- Zone de défilement interne -->
+        <div class="overflow-x-auto overflow-y-auto max-h-[55vh] md:max-h-[calc(100dvh-380px)] min-h-[260px] custom-scrollbar">
+          <table class="w-full text-xs text-left border-collapse min-w-[620px] sm:min-w-full">
+            <thead class="sticky top-0 z-10 bg-slate-50/95 dark:bg-[#0d1424]/95 backdrop-blur border-b border-slate-200 dark:border-slate-800/80">
+              <tr class="text-[10px] uppercase font-bold tracking-wider text-slate-400">
+                <th class="py-2.5 px-3 sm:px-4">Date</th>
+                <th class="py-2.5 px-3 sm:px-4 text-right">Volume</th>
+                <th class="py-2.5 px-3 sm:px-4 text-right">Montant</th>
+                <th class="py-2.5 px-3 sm:px-4 text-right">Distance cycle</th>
+                <th class="py-2.5 px-3 sm:px-4 text-right">Consommation</th>
+                <th class="py-2.5 px-3 sm:px-4 text-right">Coût / km</th>
+                <th class="py-2.5 px-3 sm:px-4 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+              {% for r in paginated_refuels.items %}
+              <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition">
+                <td class="py-2.5 px-3 sm:px-4 font-mono text-slate-500 dark:text-slate-400 whitespace-nowrap">{{ r.date_str }}</td>
+                <td class="py-2.5 px-3 sm:px-4 text-right font-mono font-bold text-slate-900 dark:text-white">{{ r.liters | number_fr }} L</td>
+                <td class="py-2.5 px-3 sm:px-4 text-right font-mono font-black text-rose-500 whitespace-nowrap">{{ r.amount | currency_fr }}</td>
+                <td class="py-2.5 px-3 sm:px-4 text-right font-mono text-slate-500">{{ r.km_since_last_refuel | number_fr }} km</td>
+                <td class="py-2.5 px-3 sm:px-4 text-right font-mono font-bold text-emerald-500">
+                  {% if r.l_per_100 > 0 %}{{ r.l_per_100 }} L/100{% else %}—{% endif %}
+                </td>
+                <td class="py-2.5 px-3 sm:px-4 text-right font-mono text-slate-400">
+                  {% if r.cost_per_km > 0 %}{{ r.cost_per_km }} Ar/km{% else %}—{% endif %}
+                </td>
+                <td class="py-2.5 px-3 sm:px-4 text-center">
+                  <form method="POST" action="/refuels/delete/{{ r.id }}" onsubmit="return confirm('Supprimer ce plein ?');">
+                    <button type="submit" class="p-1 text-slate-400 hover:text-rose-500 rounded-lg transition" title="Supprimer">
+                      <span class="icon-box w-3.5 h-3.5">{% include "icons/trash.svg" %}</span>
+                    </button>
+                  </form>
+                </td>
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="7" class="py-12 text-center text-slate-400">
+                  <div class="w-8 h-8 mx-auto mb-2 text-slate-400 icon-box">{% include "icons/fuel-station.svg" %}</div>
+                  <div class="font-bold">Aucun plein trouvé sur cette période.</div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- FOOTER & PAGINATION PLEINS -->
+        <div class="border-t border-slate-200 dark:border-slate-800/80 p-2.5 sm:p-3 bg-white/95 dark:bg-[#0c1220]/95 backdrop-blur flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs shrink-0 z-20 sticky bottom-0">
+          <div class="text-slate-500 font-mono text-[11px] text-center sm:text-left">
+            Affichage {{ paginated_refuels.start_idx }} - {{ paginated_refuels.end_idx }} sur {{ paginated_refuels.total_items }} pleins
+          </div>
+
+          <div class="flex items-center gap-1.5 font-mono">
+            {% if paginated_refuels.has_prev %}
+            <a href="/?tab=trajets&subtab=pleins&period={{ period }}&page={{ paginated_refuels.prev_page }}{% if start_date %}&start_date={{ start_date }}{% endif %}{% if end_date %}&end_date={{ end_date }}{% endif %}" class="px-3 py-1.5 min-h-[32px] flex items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 font-bold active:scale-95 transition">
+              ‹ Précédent
+            </a>
+            {% endif %}
+
+            <span class="px-3 py-1 font-bold text-slate-600 dark:text-slate-300">
+              Page {{ paginated_refuels.page }} / {{ paginated_refuels.total_pages }}
+            </span>
+
+            {% if paginated_refuels.has_next %}
+            <a href="/?tab=trajets&subtab=pleins&period={{ period }}&page={{ paginated_refuels.next_page }}{% if start_date %}&start_date={{ start_date }}{% endif %}{% if end_date %}&end_date={{ end_date }}{% endif %}" class="px-3 py-1.5 min-h-[32px] flex items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 font-bold active:scale-95 transition">
+              Suivant ›
+            </a>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+    </div>
+    {% endif %}
+
+    <!-- ===================================================================== -->
+    <!-- SECTION : CARTE & CALCUL (AJUSTÉE SANS SCROLL)                       -->
+    <!-- ===================================================================== -->
+    {% if active_tab == 'carte' %}
+    <div class="w-full h-[65vh] md:h-[calc(100dvh-220px)] min-h-[420px] rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm relative">
+      <iframe 
+        src="/planner/" 
+        class="w-full h-full border-0 block" 
+        id="plannerFrame"
+        onload="applyPlannerTheme()">
+      </iframe>
+    </div>
+    {% endif %}
+
+    <!-- ===================================================================== -->
+    <!-- SECTION : ENTRETIEN                                                  -->
+    <!-- ===================================================================== -->
+    {% if active_tab == 'entretien' %}
+    <div class="space-y-3">
+      <div class="flex items-center justify-between bg-white dark:bg-[#0d1424] p-3 rounded-2xl border border-slate-200 dark:border-slate-800/80">
+        <div>
+          <h2 class="text-sm font-bold">Carnet d'Entretien</h2>
+          <div class="text-[11px] text-slate-400">Intervalles vidange & interventions mécaniques</div>
+        </div>
+        <button onclick="openModal('modalMaintenance')" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-sm transition">
+          + Entretien
+        </button>
+      </div>
+
+      <div class="bg-white dark:bg-[#0d1424] border border-slate-200 dark:border-slate-800/80 rounded-2xl shadow-sm overflow-hidden flex flex-col">
+        <div class="overflow-x-auto overflow-y-auto max-h-[60vh] md:max-h-[calc(100dvh-320px)] min-h-[280px] custom-scrollbar">
+          <table class="w-full text-xs text-left min-w-[500px] sm:min-w-full">
+            <thead class="sticky top-0 z-10 bg-slate-50/95 dark:bg-[#0d1424]/95 backdrop-blur border-b border-slate-200 dark:border-slate-800/80">
+              <tr class="text-[10px] uppercase font-bold text-slate-400">
+                <th class="py-2.5 px-4">Date</th>
+                <th class="py-2.5 px-4">Intervention</th>
+                <th class="py-2.5 px-4 text-right">Odomètre</th>
+                <th class="py-2.5 px-4 text-right">Coût</th>
+                <th class="py-2.5 px-4">Notes</th>
+                <th class="py-2.5 px-4 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+              {% for m in maintenances %}
+              <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition">
+                <td class="py-2.5 px-4 font-mono text-slate-400">{{ m.date | date_fr }}</td>
+                <td class="py-2.5 px-4 font-bold text-slate-900 dark:text-white">
+                  <span class="inline-flex items-center gap-1.5">
+                    {% if m.is_oil_change %}
+                      <span class="icon-box w-3.5 h-3.5 text-amber-500">{% include "icons/oil.svg" %}</span>
+                    {% else %}
+                      <span class="icon-box w-3.5 h-3.5 text-blue-500">{% include "icons/maintenance.svg" %}</span>
+                    {% endif %}
+                    <span>{{ m.service_type }}</span>
+                  </span>
+                </td>
+                <td class="py-2.5 px-4 text-right font-mono font-bold">{{ m.odometer | number_fr }} km</td>
+                <td class="py-2.5 px-4 text-right font-mono text-rose-500">{{ m.cost | currency_fr }}</td>
+                <td class="py-2.5 px-4 text-slate-400 text-[11px]">{{ m.notes or '—' }}</td>
+                <td class="py-2.5 px-4 text-center">
+                  <form method="POST" action="/maintenance/delete/{{ m.id }}" onsubmit="return confirm('Supprimer cet entretien ?');">
+                    <button type="submit" class="p-1 text-slate-400 hover:text-rose-500">
+                      <span class="icon-box w-3.5 h-3.5">{% include "icons/trash.svg" %}</span>
+                    </button>
+                  </form>
+                </td>
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="6" class="py-12 text-center text-slate-400">
+                  <div class="w-8 h-8 mx-auto mb-2 text-slate-400 icon-box">{% include "icons/maintenance.svg" %}</div>
+                  <div>Aucun entretien enregistré.</div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+  </main>
+
+  <!-- ===================================================================== -->
+  <!-- MODALES POPUP : CRÉATION / ÉDITION                                   -->
+  <!-- ===================================================================== -->
+
+  <!-- MODAL : NOUVEAU TRAJET MANUEL -->
+  <div id="modalTripManual" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="w-full max-w-md bg-white dark:bg-[#0d1424] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-base font-bold">Nouveau Trajet</h3>
+        <button onclick="closeModal('modalTripManual')" class="text-slate-400 hover:text-slate-600 text-lg">✕</button>
+      </div>
+      <form method="POST" action="/trips/add" class="space-y-3 text-xs">
+        <div>
+          <label class="block text-slate-400 font-semibold mb-1">Date</label>
+          <input type="date" name="trip_date" value="{{ today }}" required class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-200">
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-slate-400 font-semibold mb-1">Lieu Départ</label>
+            <input type="text" name="depart" placeholder="Ex: Fenoarivo" required class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-200">
+          </div>
+          <div>
+            <label class="block text-slate-400 font-semibold mb-1">Lieu Destination</label>
+            <input type="text" name="destination" placeholder="Ex: Ankorondrano" required class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-200">
+          </div>
+        </div>
+        <div class="grid grid-cols-3 gap-2">
+          <div>
+            <label class="block text-slate-400 font-semibold mb-1">Aller (km)</label>
+            <input type="number" step="0.01" id="m_aller" name="aller" value="0.0" oninput="calcManualTotal()" class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-2 py-2 font-mono">
+          </div>
+          <div>
+            <label class="block text-slate-400 font-semibold mb-1">Retour (km)</label>
+            <input type="number" step="0.01" id="m_retour" name="retour" value="0.0" oninput="calcManualTotal()" class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-2 py-2 font-mono">
+          </div>
+          <div>
+            <label class="block text-slate-400 font-semibold mb-1">Total (km)</label>
+            <input type="number" step="0.01" id="m_total" name="total" required class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-2 py-2 font-mono font-bold text-brand-500">
+          </div>
+        </div>
+        <button type="submit" class="w-full py-2.5 mt-2 bg-brand-500 hover:bg-brand-600 text-white font-bold rounded-xl shadow-lg transition">
+          Enregistrer le trajet
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL : MODIFIER TRAJET -->
+  <div id="modalEditTrip" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="w-full max-w-md bg-white dark:bg-[#0d1424] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-base font-bold">Modifier Trajet</h3>
+        <button onclick="closeModal('modalEditTrip')" class="text-slate-400 hover:text-slate-600 text-lg">✕</button>
+      </div>
+      <form id="formEditTrip" method="POST" action="" class="space-y-3 text-xs">
+        <div>
+          <label class="block text-slate-400 font-semibold mb-1">Date</label>
+          <input type="date" id="edit_date" name="trip_date" required class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-200">
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-slate-400 font-semibold mb-1">Départ</label>
+            <input type="text" id="edit_depart" name="depart" required class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-200">
+          </div>
+          <div>
+            <label class="block text-slate-400 font-semibold mb-1">Destination</label>
+            <input type="text" id="edit_dest" name="destination" required class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-200">
+          </div>
+        </div>
+        <div class="grid grid-cols-3 gap-2">
+          <div>
+            <label class="block text-slate-400 font-semibold mb-1">Aller</label>
+            <input type="number" step="0.01" id="edit_aller" name="aller" oninput="calcEditTotal()" class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-2 py-2 font-mono">
+          </div>
+          <div>
+            <label class="block text-slate-400 font-semibold mb-1">Retour</label>
+            <input type="number" step="0.01" id="edit_retour" name="retour" oninput="calcEditTotal()" class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-2 py-2 font-mono">
+          </div>
+          <div>
+            <label class="block text-slate-400 font-semibold mb-1">Total (km)</label>
+            <input type="number" step="0.01" id="edit_total" name="total" required class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-2 py-2 font-mono font-bold text-brand-500">
+          </div>
+        </div>
+        <button type="submit" class="w-full py-2.5 mt-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg transition">
+          Mettre à jour
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL : PLEIN CARBURANT -->
+  <div id="modalRefuel" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="w-full max-w-sm bg-white dark:bg-[#0d1424] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-base font-bold">Nouveau Plein</h3>
+        <button onclick="closeModal('modalRefuel')" class="text-slate-400 hover:text-slate-600 text-lg">✕</button>
+      </div>
+      <form method="POST" action="/refuels/add" class="space-y-3 text-xs">
+        <div>
+          <label class="block text-slate-400 font-semibold mb-1">Date</label>
+          <input type="date" name="refuel_date" value="{{ today }}" required class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-200">
+        </div>
+        <div>
+          <label class="block text-slate-400 font-semibold mb-1">Montant (Ariary)</label>
+          <input type="number" step="100" id="refuel_amount" name="amount" required oninput="calcLiters()" placeholder="Ex: 10000" class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 font-mono text-rose-500 font-bold">
+        </div>
+        <div>
+          <label class="block text-slate-400 font-semibold mb-1">Litres estimés</label>
+          <input type="number" step="0.01" id="refuel_liters" name="liters" required class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 font-mono font-bold text-slate-900 dark:text-white">
+        </div>
+        <div>
+          <label class="block text-slate-400 font-semibold mb-1">Notes / Station</label>
+          <input type="text" name="notes" placeholder="Ex: Shell Ankorondrano" class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2">
+        </div>
+        <button type="submit" class="w-full py-2.5 mt-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl shadow-lg transition">
+          Enregistrer le plein
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL : NOUVEL ENTRETIEN -->
+  <div id="modalMaintenance" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="w-full max-w-sm bg-white dark:bg-[#0d1424] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-base font-bold">Enregistrer Entretien</h3>
+        <button onclick="closeModal('modalMaintenance')" class="text-slate-400 hover:text-slate-600 text-lg">✕</button>
+      </div>
+      <form method="POST" action="/maintenance/add" class="space-y-3 text-xs">
+        <div>
+          <label class="block text-slate-400 font-semibold mb-1">Date</label>
+          <input type="date" name="service_date" value="{{ today }}" required class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-200">
+        </div>
+        <div>
+          <label class="block text-slate-400 font-semibold mb-1">Type d'intervention</label>
+          <select name="service_type" required class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-200">
+            <option value="Vidange Moteur">Vidange Moteur</option>
+            <option value="Plaquettes de frein">Plaquettes de frein</option>
+            <option value="Pneu / Chambre à air">Pneu / Chambre à air</option>
+            <option value="Bougie">Bougie</option>
+            <option value="Courroie / Galets">Courroie / Galets</option>
+            <option value="Révision générale">Révision générale</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-slate-400 font-semibold mb-1">Odomètre actuel (km)</label>
+          <input type="number" step="0.1" name="odometer" value="{{ stats.current_odometer }}" required class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 font-mono">
+        </div>
+        <div>
+          <label class="block text-slate-400 font-semibold mb-1">Coût total (Ariary)</label>
+          <input type="number" step="500" name="cost" value="0" class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 font-mono">
+        </div>
+        <button type="submit" class="w-full py-2.5 mt-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl shadow-lg transition">
+          Valider l'intervention
+        </button>
+      </form>
+    </div>
+  </div>
+
+  {% endif %}
+
+  <!-- ===================================================================== -->
+  <!-- SCRIPTS CHART.JS, SYNCHRONISATION THÈME & INTERACTIONS                -->
+  <!-- ===================================================================== -->
+  <script>
+    // --- GESTION DU THÈME SOMBRE / CLAIR & SYNCHRONISATION IFRAME ---
+    const themeToggleBtn = document.getElementById('themeToggleBtn');
+    
+    function initTheme() {
+      const isDark = localStorage.getItem('odomi_theme') !== 'light';
+      document.documentElement.classList.toggle('dark', isDark);
+    }
+
+    function applyPlannerTheme() {
+      const iframe = document.getElementById('plannerFrame');
+      if (!iframe) return;
+
+      const isDark = document.documentElement.classList.contains('dark');
+
+      if (iframe.contentWindow) {
+        iframe.contentWindow.postMessage({ type: 'ODOMI_THEME_CHANGE', theme: isDark ? 'dark' : 'light' }, '*');
+      }
+
+      try {
+        const doc = iframe.contentDocument || iframe.contentWindow.document;
+        if (!doc) return;
+
+        if (isDark) {
+          doc.documentElement.classList.add('dark');
+          if (doc.body) doc.body.classList.add('dark');
+        } else {
+          doc.documentElement.classList.remove('dark');
+          if (doc.body) doc.body.classList.remove('dark');
+        }
+
+        let style = doc.getElementById('odomi-planner-contrast-override');
+        if (!style) {
+          style = doc.createElement('style');
+          style.id = 'odomi-planner-contrast-override';
+          doc.head.appendChild(style);
+        }
+
+        style.textContent = `
+          html.dark, html.dark body {
+            background-color: #070b14 !important;
+            color: #f1f5f9 !important;
+          }
+          html.dark .sidebar,
+          html.dark .card,
+          html.dark .panel,
+          html.dark form {
+            background-color: #0d1424 !important;
+            border-color: #1e293b !important;
+            color: #f1f5f9 !important;
+          }
+          html.dark label,
+          html.dark .text-slate-400,
+          html.dark .text-slate-500,
+          html.dark .text-gray-400,
+          html.dark .text-gray-500 {
+            color: #94a3b8 !important;
+            font-weight: 700 !important;
+          }
+          html.dark input[type="radio"] + label,
+          html.dark label:has(input[type="radio"]),
+          html.dark .radio-label,
+          html.dark .form-check-label {
+            color: #f8fafc !important;
+            font-weight: 700 !important;
+          }
+          html:not(.dark) label,
+          html:not(.dark) input[type="radio"] + label,
+          html:not(.dark) label:has(input[type="radio"]) {
+            color: #0f172a !important;
+            font-weight: 700 !important;
+          }
+          html.dark input[type="text"],
+          html.dark input[type="date"],
+          html.dark select {
+            background-color: #1e293b !important;
+            color: #ffffff !important;
+            border-color: #334155 !important;
+          }
+          body {
+            margin: 0;
+            padding: 8px !important;
+            overflow: hidden !important;
+          }
+        `;
+      } catch (e) {
+        console.debug("Note intégration iframe :", e);
+      }
+    }
+
+    if (themeToggleBtn) {
+      themeToggleBtn.addEventListener('click', () => {
+        const isDark = document.documentElement.classList.toggle('dark');
+        localStorage.setItem('odomi_theme', isDark ? 'dark' : 'light');
+        updateChartsTheme(isDark);
+        applyPlannerTheme();
+      });
+    }
+    initTheme();
+
+    // --- CONTRÔLE DES MODALES ---
+    function openModal(id) { document.getElementById(id)?.classList.remove('hidden'); }
+    function closeModal(id) { document.getElementById(id)?.classList.add('hidden'); }
+
+    function openEditTripModal(btn) {
+      const d = btn.dataset;
+      document.getElementById('formEditTrip').action = '/trips/update/' + d.id;
+      document.getElementById('edit_date').value = d.date;
+      document.getElementById('edit_depart').value = d.depart;
+      document.getElementById('edit_dest').value = d.dest;
+      document.getElementById('edit_aller').value = d.aller;
+      document.getElementById('edit_retour').value = d.retour;
+      document.getElementById('edit_total').value = d.total;
+      openModal('modalEditTrip');
+    }
+
+    // --- CALCULS DYNAMIQUES EN DIRECT ---
+    function calcManualTotal() {
+      const a = parseFloat(document.getElementById('m_aller').value) || 0;
+      const r = parseFloat(document.getElementById('m_retour').value) || 0;
+      document.getElementById('m_total').value = (a + r).toFixed(2);
+    }
+
+    function calcEditTotal() {
+      const a = parseFloat(document.getElementById('edit_aller').value) || 0;
+      const r = parseFloat(document.getElementById('edit_retour').value) || 0;
+      document.getElementById('edit_total').value = (a + r).toFixed(2);
+    }
+
+    function calcLiters() {
+      const pricePerL = {{ default_fuel_price or 5300 }};
+      const amt = parseFloat(document.getElementById('refuel_amount').value) || 0;
+      if (pricePerL > 0) {
+        document.getElementById('refuel_liters').value = (amt / pricePerL).toFixed(2);
+      }
+    }
+
+    // --- INITIALISATION DES GRAPHES CHART.JS ---
+    let kmChartInstance = null;
+    let fuelChartInstance = null;
+    const chartRawData = {{ chart_data_json | safe if chart_data_json else '{}' }};
+
+    function renderCharts() {
+      const isDark = document.documentElement.classList.contains('dark');
+      const gridColor = isDark ? 'rgba(51, 65, 85, 0.4)' : 'rgba(203, 213, 225, 0.6)';
+      const textColor = isDark ? '#94a3b8' : '#64748b';
+
+      const labels = chartRawData.labels || [];
+      const kmData = chartRawData.km_series || [];
+      const fuelData = chartRawData.fuel_series || [];
+
+      const ctxKm = document.getElementById('chartKilometrage')?.getContext('2d');
+      if (ctxKm) {
+        if (kmChartInstance) kmChartInstance.destroy();
+        kmChartInstance = new Chart(ctxKm, {
+          type: 'bar',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'Kilomètres',
+              data: kmData,
+              backgroundColor: '#f97316',
+              borderRadius: 6,
+              hoverBackgroundColor: '#ea580c',
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+              x: { grid: { display: false }, ticks: { color: textColor, font: { family: 'Plus Jakarta Sans', size: 10 } } },
+              y: { grid: { color: gridColor }, ticks: { color: textColor, font: { family: 'JetBrains Mono', size: 10 } } }
+            }
+          }
+        });
+      }
+
+      const ctxFuel = document.getElementById('chartCarburant')?.getContext('2d');
+      if (ctxFuel) {
+        if (fuelChartInstance) fuelChartInstance.destroy();
+        fuelChartInstance = new Chart(ctxFuel, {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'Carburant (Ar)',
+              data: fuelData,
+              borderColor: '#f43f5e',
+              backgroundColor: 'rgba(244, 63, 94, 0.1)',
+              fill: true,
+              tension: 0.35,
+              pointRadius: 3,
+              pointBackgroundColor: '#f43f5e',
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+              x: { grid: { display: false }, ticks: { color: textColor, font: { family: 'Plus Jakarta Sans', size: 10 } } },
+              y: { grid: { color: gridColor }, ticks: { color: textColor, font: { family: 'JetBrains Mono', size: 10 } } }
+            }
+          }
+        });
+      }
+    }
+
+    function updateChartsTheme() {
+      if (kmChartInstance && fuelChartInstance) {
+        renderCharts();
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      renderCharts();
+      setTimeout(applyPlannerTheme, 300);
+      setTimeout(applyPlannerTheme, 1000);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+# Fichiers exclus du deploiement Vercel (build + bundle de la fonction).
+# Les elements necessaires au runtime restent inclus : main.py, database.py,
+# services.py, dash_app.py, dash_route_planner.py, templates/**, static/**,
+# requirements.txt, .python-version.
+
+# Archives de versions locales
+version/
+
+# Donnees du prototype de routage (OSM ~371 Mo, inutile au runtime)
+API/data/
+*.pbf
+
+# Tests et caches de developpement
+tests/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Secrets et bases locales (jamais deployes ; sur Vercel, utiliser les
+# variables d'environnement du projet)
+.env
+*.db
+*.db-shm
+*.db-wal
+
+# Outillage local Windows / hebergeurs alternatifs
+create.ps1
+launch.ps1
+Procfile

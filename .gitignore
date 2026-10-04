@@ -1,0 +1,46 @@
+# Runtime / secrets
+.env
+*.db
+*.db-shm
+*.db-wal
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+.env/
+.pytest_cache/
+.mypy_cache/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs / assets locaux
+*.log
+info.log
+
+# Notes locales contenant des secrets (cle API) : jamais versionnees
+API/1.0/Nouveau document texte.txt
+
+# Archives de versions locales (hors perimetre du depot)
+version/
+
+# Donnees lourdes du prototype de routage (OSM ~371 Mo > limite GitHub 100 Mo/fichier)
+API/data/
+*.pbf
+
+# Vercel CLI (dossier local)
+.vercel/
+
+# NOTE : static/vendor/ (Tailwind, Chart.js, FontAwesome, polices) est
+# volontairement versionne : il est requis pour que l'UI fonctionne sur Vercel,
+# ou setup_offline.py n'est pas execute. Regeneration : python setup_offline.py
+
+.pytest_cache/
+__pycache__/
+version
